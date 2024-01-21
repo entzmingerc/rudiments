@@ -25,7 +25,8 @@ local BeatClock = require 'beatclock'
 local clk = BeatClock.new()
 local all_midi = midi.connect()
 local pitch_view_enable = false
-local last_offset = 0
+local last_note = {0, 0, 0, 0, 0, 0, 0, 0}
+local note_trig_flag = {false, false, false, false, false, false, false, false}
 key1_hold = false
 
 
@@ -132,24 +133,7 @@ function setup_midi()
   end
 end
 
-function trigger(i)
-  last = i
-  col = track_pitch_pos[i]() -- increment pitch sequence position on trigger
-  last_offset = track_pitch_seq[col][i]:peek() -- get pitch offset from grid square
-  if params:get("internal_ON_OFF") == 1 then
-    engine.freq(mutil.note_num_to_freq(track_notes[i] + last_offset), i) -- current freq to midi, add offset, midi to freq, set engine freq
-    engine.trigger(i) -- triggers internal rudiments SC engine
-  end
-  -- trigger nb voice
-  local player = params:lookup_param(nb_voices[i]):get_player()
-  player:note_on(util.clamp(track_notes[i] + last_offset, 0, 127), 5)
-end
 
-function trigger_note_off(i)
-  -- call this first to release previous note, then call trigger to increment to new note
-  local player = params:lookup_param(nb_voices[i]):get_player()
-  player:note_off(util.clamp(track_notes[i] + last_offset, 0, 127))
-end
 
 function randomize()
   for i = 1,rudiments_track_count do
@@ -553,8 +537,6 @@ end
 
 -- sequencer section
 
-
-
 function reer(i)
   if track[i].k == 0 then
     for n=1,32 do
@@ -571,9 +553,13 @@ local function trig()
       if accents==1 then
         params:set("lfoShape" .. i, math.random(0, 1))
       end
-      trigger_note_off(i) -- turn off previous note
+      if note_trig_flag[i] then
+        trigger_note_off(i) -- turn off previous note
+      end
       trigger(i)
       g:led(1,i,15) -- high brightness trigger on square 1
+      -- doubledecker needs note off event to trigger note with two tracks with same pitch
+      -- ...don't want to fix this right now lol
 
       for j = 1,4 do
         g:led(j + 11, i, grid_LED_seq[j+11][i]:peek()) -- set grid LED values
@@ -581,7 +567,9 @@ local function trig()
       g:led(track_pitch_pos[i]:peek(), i, 15) -- highlight the pitch sequence square that we're at
 
     else
-      trigger_note_off(i) -- turn off previous note
+      if note_trig_flag[i] then
+        trigger_note_off(i) -- turn off previous note
+      end
       g:led(1,i,1) -- turn off square 1
 
     end
@@ -589,6 +577,27 @@ local function trig()
     g:refresh()
 
   end
+end
+
+function trigger(i)
+  last = i
+  col = track_pitch_pos[i]() -- increment pitch sequence position on trigger
+  last_note[i] = track_notes[i] + track_pitch_seq[col][i]:peek() -- get pitch offset from grid square
+  if params:get("internal_ON_OFF") == 1 then
+    engine.freq(mutil.note_num_to_freq(last_note[i]), i) -- current freq to midi, add offset, midi to freq, set engine freq
+    engine.trigger(i) -- triggers internal rudiments SC engine
+  end
+  -- trigger nb voice
+  local player = params:lookup_param(nb_voices[i]):get_player()
+  player:note_on(util.clamp(last_note[i], 0, 127), 5)
+  note_trig_flag[i] = true
+end
+
+function trigger_note_off(i)
+  -- call this first to release previous note, then call trigger to increment to new note
+  note_trig_flag[i] = false
+  local player = params:lookup_param(nb_voices[i]):get_player()
+  player:note_off(util.clamp(last_note[i], 0, 127))
 end
 
 function init()
@@ -610,6 +619,7 @@ function init()
   setup_params()
   setup_midi()
   randomize()
+  track_notes = {60, 60, 60, 60, 60, 60, 60, 60} -- set default note to 60 after randomize()
   
   for i=1,rudiments_track_count do reer(i) end
 
