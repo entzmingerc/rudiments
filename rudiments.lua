@@ -25,7 +25,7 @@ local BeatClock = require 'beatclock'
 local clk = BeatClock.new()
 local all_midi = midi.connect()
 local pitch_view_enable = false
-local last_note = {0, 0, 0, 0, 0, 0, 0, 0}
+last_note = {0, 0, 0, 0, 0, 0, 0, 0}
 local note_trig_flag = {false, false, false, false, false, false, false, false}
 key1_hold = false
 
