@@ -115,9 +115,9 @@ This script makes a new SuperCollider engine available, `Rudiments`. Please see 
 
 ## Thanks
 
-Thanks to [@cfdrake](https://github.com/cfdrake) for creating rudiments
-Thanks to [@rbxbx](http://github.com/rbxbx) for porting the playfair sequencer to this engine.
-Thanks to [@tehn](https://llllllll.co/u/tehn/summary) for writing playfair
-Thanks to [@yaw](https://llllllll.co/u/yaw/summary) for adding grid controls
-Thanks to [@sixolet](https://llllllll.co/u/sixolet/summary) for writing nb
-Thanks to [@postsolarpunk](https://llllllll.co/u/postsolarpunk/summary) for adding pitch view, grid controls, nb support
+Thanks to [@cfdrake](https://github.com/cfdrake) for creating rudiments  
+Thanks to [@rbxbx](http://github.com/rbxbx) for porting the playfair sequencer to this engine  
+Thanks to [@tehn](https://llllllll.co/u/tehn/summary) for writing playfair  
+Thanks to [@yaw](https://llllllll.co/u/yaw/summary) for adding grid controls  
+Thanks to [@sixolet](https://llllllll.co/u/sixolet/summary) for writing nb  
+Thanks to [@postsolarpunk](https://llllllll.co/u/postsolarpunk/summary) for adding pitch view, grid controls, nb support  
