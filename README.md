@@ -48,8 +48,9 @@ Use the `PARAMS` menu to configure voices manually, set up clock/sync behavior, 
 Each track has a fixed length pitch sequence of 4. Each step will offset the current note by either 0, +5, +7, or +12 semitones. Each time a trigger occurs, it will step forward 1 step in the pitch sequence. For example, the default note is 60 which is middle C. If the offset sequence is 0, +5, 0, +12, then you will hear midi note sequence 60, 65, 60, 72. Turn E3 to the right to increment all offsets, which would result in a sequence +5, +7, +5, 0 instead. If you turn E3 to the left, then for each step there is a 50% chance the offset will increment. Press a pad on the grid (columns 12 - 15) to increment the offset of a step. Pressing K2 only resets the trigger sequencer. 
 
 ## Grid Control
-Tap in & clear rhythms with 1-4, nudge synth parameters up & down with 5-10.  Randomize the synth voice with 15
 ![Grid Control](grid-rudiments.PNG)
+
+Tap in & clear rhythms with 1-4, nudge synth parameters up & down with 5-11, set pitch offset sequence with 12-15, randomize the synth voice with 16.  
 
 Column Pads (left to right)
 1. Clear all triggers
