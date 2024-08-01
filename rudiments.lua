@@ -20,7 +20,6 @@ seq = require 'sequins'
 local last = 0
 rudiments_track_count = 8
 local pitch_step_count = 4
-local accents = 1
 local BeatClock = require 'beatclock'
 local clk = BeatClock.new()
 local all_midi = midi.connect()
@@ -28,7 +27,6 @@ local pitch_view_enable = false
 last_note = {0, 0, 0, 0, 0, 0, 0, 0}
 local note_trig_flag = {false, false, false, false, false, false, false, false}
 key1_hold = false
-
 
 -- grid initialization
 col_11_flag = 0
@@ -69,47 +67,50 @@ local running = true
 local track_edit = 1
 local current_pattern = 0
 local current_pset = 0
-
+-- let's prebake some strings so we don't have to spend time concatenating them
+t_density = {"density1", "density2", "density3", "density4", "density5", "density6", "density7", "density8"}
+t_length = {"length1", "length2", "length3", "length4", "length5", "length6", "length7", "length8"}
+t_pitch = {"pitch1", "pitch2", "pitch3", "pitch4", "pitch5", "pitch6", "pitch7", "pitch8"}
 nb_voices = {"nb_1", "nb_2", "nb_3", "nb_4","nb_5", "nb_6", "nb_7", "nb_8"}
 track = {}
-track_notes = {60, 60, 60, 60, 60, 60, 60, 60} -- to do put this into the track table
 pitch_offset_number = 0
 
 for i=1,rudiments_track_count do
+  -- TODO: I've replaced track[i].k and track[i].n with density and length params accessible via norns menu
+  -- I need to replace the rest of this, it used to have k = 0 and n = 9 - i in this table
   track[i] = {
-    k = 0, -- euclidean rhythm triggers (first number on screen)
-    n = 9 - i, -- initial euclidean rhythm length (second number on screen)
     pos = 1, -- position in trigger sequence
     s = {} -- trigger TRUE or FALSE
   }
 end
 
-for i = 1,8 do
+-- functions
+function density_check(i)
+  params:set(t_density[i], util.clamp(params:get(t_density[i]), 0, params:get(t_length[i])) )
+  reer(i)
+  redraw()
 end
 
--- I don't think this is used...
--- local pattern = {}
--- for i=1,112 do
---   pattern[i] = {
---     data = 0,
---     k = {},
---     n = {}
---   }
---   for x=1,rudiments_track_count do
---     pattern[i].k[x] = 0
---     pattern[i].n[x] = 0
---   end
--- end
-
--- functions
 function setup_params()
   for i = 1,rudiments_track_count do
     -- OSC
     params:add_separator("Engine " .. i, i)
-    params:add_control("shape" .. i, "osc " .. i .. " shape", controlspec.new(0, 1, 'lin', 1, 0, ''))
-    params:set_action("shape" .. i, function(x) engine.shape(x, i) end)
-    params:add_control("freq" .. i, "osc " .. i .. " freq", controlspec.new(20, 10000, 'lin', 1, 120, 'hz'))
-    params:set_action("freq" .. i, function(x) engine.freq(x, i) end)
+
+    -- Length, Density, Pitch Params
+    params:add_number(t_length[i], "length " .. i, 1, 32, rudiments_track_count - i + 1)
+    params:add_number(t_density[i], "density " .. i, 0, 32, 0)
+    params:add_number(t_pitch[i], "pitch ".. i, 0, 127, 60)
+    params:set_action(t_length[i], function(x)
+      density_check(i)
+    end)
+    params:set_action(t_density[i], function(x)
+      density_check(i)
+    end)
+
+    params:add_option("shape" .. i, "osc " .. i .. " shape", {"square", "triangle"})
+    params:set_action("shape" .. i, function(x) engine.shape(x-1, i) end)
+    -- params:add_control("freq" .. i, "osc " .. i .. " freq", controlspec.new(20, 10000, 'lin', 1, 120, 'hz'))
+    -- params:set_action("freq" .. i, function(x) engine.freq(x, i) end) -- old freq param, using midi notes instead now
 
     -- ENV
     params:add_control("decay" .. i, "env " .. i .. " decay", controlspec.new(0.05, 1, 'lin', 0.01, 0.2, 'sec'))
@@ -120,8 +121,8 @@ function setup_params()
     -- LFO
     params:add_control("lfoFreq" .. i, "lfo " .. i .. " freq", controlspec.new(1, 1000, 'lin', 1, 1, 'hz'))
     params:set_action("lfoFreq" .. i, function(x) engine.lfoFreq(x, i) end)
-    params:add_control("lfoShape" .. i, "lfo " .. i .. " shape", controlspec.new(0, 1, 'lin', 1, 0, ''))
-    params:set_action("lfoShape" .. i, function(x) engine.lfoShape(x, i) end)
+    params:add_option("lfoShape" .. i, "lfo " .. i .. " shape", {"square", "triangle"})
+    params:set_action("lfoShape" .. i, function(x) engine.lfoShape(x-1, i) end)
     params:add_control("lfoSweep" .. i, "lfo " .. i .. " sweep", controlspec.new(0, 2000, 'lin', 1, 0, ''))
     params:set_action("lfoSweep" .. i, function(x) engine.lfoSweep(x, i) end)
   end
@@ -137,14 +138,12 @@ end
 
 function randomize()
   for i = 1,rudiments_track_count do
-    track_notes[i] = math.floor(math.random()*80+20)
-    params:set("shape" .. i, math.random(0, 1))
-    -- params:set("freq" .. i, math.random(20, 10000)) -- old controls, changed to midi notes
-    params:set("freq" .. i, mutil.note_num_to_freq(track_notes[i]))
+    params:set(t_pitch[i], math.floor(math.random()*80+20))
+    params:set("shape" .. i, math.random(1, 2))
     params:set("decay" .. i, math.random())
     params:set("sweep" .. i, math.random(0, 2000))
     params:set("lfoFreq" .. i, math.random(1, 1000))
-    params:set("lfoShape" .. i, math.random(0, 1))
+    params:set("lfoShape" .. i, math.random(1, 2))
     params:set("lfoSweep" .. i, math.random(0, 2000))
   end
 end
@@ -154,42 +153,34 @@ g.key = function(x,y,z)
 
     -- track operations
     if x == 1 then
-      -- CLEAR TRACK
-      track[y].k = 0
-      reer(y)
-      redraw()      
+      -- ZERO DENSITY
+      params:set(t_density[y], 0)
+      density_check(y)
+
     elseif x == 2 then
       -- MORE DENSITY
-      track[y].k = util.clamp(track[y].k+1,0,track[y].n)
-      reer(y)
-      redraw()
+      params:set(t_density[y], params:get(t_density[y]) + 1) -- add 1
+      density_check(y)
 
     elseif x == 3 then
       -- TRACK LENGTH SET TO 0
-      track[y].n = 1
-      -- track[y].n = util.clamp(track[y].n-1,1,32)
-      track[y].k = util.clamp(track[y].k,0,track[y].n)
-      reer(y)
-      redraw()
+      params:set(t_length[y], 1)
+      params:set(t_density[y], util.clamp(params:get(t_density[y]), 0, params:get(t_length[y])))
+      density_check(y)
+
     elseif x == 4 then
       -- MORE TRACK LENGTH
-      track[y].n = util.clamp(track[y].n+1,1,32)
-      track[y].k = util.clamp(track[y].k,0,track[y].n)
-      reer(y)
-      redraw()
+      params:set(t_length[y], util.clamp(params:get(t_length[y])+1, 1, 32))
+      density_check(y)
       
     -- synth ops  
     elseif x == 5 then 
       -- OSC LOWER
-      -- params:set("freq" .. y, util.clamp(params:get("freq" .. y)*0.9,20,10000))
-      track_notes[y] = util.clamp(track_notes[y] - 1, 0, 127)
-      params:set("freq" .. y, mutil.note_num_to_freq(track_notes[y]))
+      params:set(t_pitch[y], util.clamp(params:get(t_pitch[y]) - 1, 0, 127))
 
     elseif x == 6 then 
       -- OSC HIGHER
-      -- params:set("freq" .. y, util.clamp(params:get("freq" .. y)*1.1,20,10000))
-      track_notes[y] = util.clamp(track_notes[y] + 1, 0, 127)
-      params:set("freq" .. y, mutil.note_num_to_freq(track_notes[y]))
+      params:set(t_pitch[y], util.clamp(params:get(t_pitch[y]) + 1, 0, 127))
       
     elseif x == 7 then
       -- ENV DECAY LOWER
@@ -278,7 +269,6 @@ g.key = function(x,y,z)
     elseif x == 9 then
       -- LFO FREQ LOWER
       params:set("lfoFreq" .. y, util.clamp(params:get("lfoFreq" .. y)*0.95,1,1000))
-      -- params:set("lfoShape" .. y, math.random(0, 1))
       params:set("lfoSweep" .. y, math.random(0,2000))
 
       -- drumcrow = "pw"
@@ -322,7 +312,6 @@ g.key = function(x,y,z)
     elseif x == 10 then
       -- LFO FREQ HIGHER
       params:set("lfoFreq" .. y, util.clamp(params:get("lfoFreq" .. y)*1.05,1,1000))
-      -- params:set("lfoShape" .. y, math.random(0, 1))
       params:set("lfoSweep" .. y, math.random(0,2000))
 
       -- drumcrow = "pw"
@@ -387,8 +376,8 @@ g.key = function(x,y,z)
 
         -- oilcan, add 1 to note, midi note selects timbre on oilcan
         elseif string.find(desc.name, "Oilcan") then
-          if track_notes[y] <= 126 and track_notes[y] >= 0 then -- max midi note 126 to add 1 to, min midi note is 0
-            track_notes[y] = track_notes[y] + 1
+          if params:get(t_pitch[y]) <= 126 and params:get(t_pitch[y]) >= 0 then -- max midi note 126 to add 1 to, min midi note is 0
+            params:set(t_pitch[y], params:get(t_pitch[y]) + 1)
           end
 
         -- doubledecker, "pitch ratio 2" increment with wrapping
@@ -421,8 +410,8 @@ g.key = function(x,y,z)
 
         -- oilcan, subtract 1 from note, midi note selects timbre on oilcan
         elseif string.find(desc.name, "Oilcan") then
-          if track_notes[y] <= 127 and track_notes[y] >= 1 then -- max midi note 127, min midi note to sub from is 1
-            track_notes[y] = track_notes[y] - 1
+          if params:get(t_pitch[y]) <= 127 and params:get(t_pitch[y]) >= 1 then -- max midi note 127, min midi note to sub from is 1
+            params:set(t_pitch[y], params:get(t_pitch[y]) - 1)
           end
 
         -- doubledecker, "pitch ratio 2" increment with wrapping
@@ -444,14 +433,13 @@ g.key = function(x,y,z)
 
     elseif x == 16 then
       -- RANDOMIZE ALL
-      if params:get("internal_ON_OFF") == 1 then
-        track_notes[y] = math.floor(math.random()*80+20)
-        params:set("shape" .. y, math.random(0, 1))
-        params:set("freq" .. y, mutil.note_num_to_freq(track_notes[y]))
+      if params:get("internal_ON_OFF") == 2 then
+        params:set(t_pitch[y], math.floor(math.random()*80+20))
+        params:set("shape" .. y, math.random(1, 2))
         params:set("decay" .. y, math.random())
         params:set("sweep" .. y, math.random(0, 2000))
         params:set("lfoFreq" .. y, math.random(1, 1000))
-        params:set("lfoShape" .. y, math.random(0, 1))
+        params:set("lfoShape" .. y, math.random(1, 2))
         params:set("lfoSweep" .. y, math.random(0, 2000))
       end
 
@@ -465,7 +453,7 @@ g.key = function(x,y,z)
         params:set("drumcrow_pw_"..p_num, math.random() * 2 - 1)
         params:set("drumcrow_pw2_"..p_num, math.random() * 20 - 10)
         -- randomize nb midi note
-        track_notes[y] = math.floor(math.random()*80+20)
+        params:set(t_pitch[y], math.floor(math.random()*80+20))
 
       -- emplaitress
       elseif string.find(desc.name, "emplait") then
@@ -475,7 +463,7 @@ g.key = function(x,y,z)
         params:set("plaits_timbre_"..p_num, math.random()*0.8)
         params:set("plaits_morph_"..p_num, math.random()*0.8)
         -- randomize nb midi note
-        track_notes[y] = math.floor(math.random()*80+20)
+        params:set(t_pitch[y], math.floor(math.random()*80+20))
 
       -- nb_rudiments
       elseif string.find(desc.name, "rudiments") then
@@ -488,7 +476,7 @@ g.key = function(x,y,z)
         params:set("rudiments_lfoShape_" .. p_num, math.random(0, 1))
         params:set("rudiments_lfoSweep_" .. p_num, math.random(0, 2000))
         -- randomize nb midi note
-        track_notes[y] = math.floor(math.random()*80+20)
+        params:set(t_pitch[y], math.floor(math.random()*80+20))
 
       -- oilcan      
       elseif string.find(desc.name, "Oilcan") then
@@ -538,28 +526,26 @@ end
 -- sequencer section
 
 function reer(i)
-  if track[i].k == 0 then
+  if params:get(t_density[i]) == 0 then
     for n=1,32 do
-      track[i].s[n] = false -- set all triggers in table to false
+      track[i].s[n] = false
     end
   else
-    track[i].s = er.gen(track[i].k,track[i].n) -- generate euclidean rhythm trigger pattern
+    track[i].s = er.gen(params:get(t_density[i]), params:get(t_length[i]))
   end
 end
 
 local function trig()
   for i=1,rudiments_track_count do
     if track[i].s[track[i].pos] then
-      if accents==1 then
-        params:set("lfoShape" .. i, math.random(0, 1))
+      if params:get("internal_accents") == 2 then
+        params:set("lfoShape" .. i, math.random(1, 2))
       end
       if note_trig_flag[i] then
         trigger_note_off(i) -- turn off previous note
       end
       trigger(i)
       g:led(1,i,15) -- high brightness trigger on square 1
-      -- doubledecker needs note off event to trigger note with two tracks with same pitch
-      -- ...don't want to fix this right now lol
 
       for j = 1,4 do
         g:led(j + 11, i, grid_LED_seq[j+11][i]:peek()) -- set grid LED values
@@ -582,14 +568,14 @@ end
 function trigger(i)
   last = i
   col = track_pitch_pos[i]() -- increment pitch sequence position on trigger
-  last_note[i] = track_notes[i] + track_pitch_seq[col][i]:peek() -- get pitch offset from grid square
-  if params:get("internal_ON_OFF") == 1 then
+  last_note[i] = params:get(t_pitch[i]) + track_pitch_seq[col][i]:peek() -- get pitch offset from grid square
+  if params:get("internal_ON_OFF") == 2 then
     engine.freq(mutil.note_num_to_freq(last_note[i]), i) -- current freq to midi, add offset, midi to freq, set engine freq
     engine.trigger(i) -- triggers internal rudiments SC engine
   end
   -- trigger nb voice
   local player = params:lookup_param(nb_voices[i]):get_player()
-  player:note_on(util.clamp(last_note[i], 0, 127), 5)
+  player:play_note(util.clamp(last_note[i], 0, 127), 5, params:get("nb_note_length"))
   note_trig_flag[i] = true
 end
 
@@ -613,7 +599,9 @@ function init()
   nb:add_param(nb_voices[8], nb_voices[8])
   nb:add_player_params()
 
-  params:add_control("internal_ON_OFF", "internal_ON_OFF", controlspec.new(0, 1, 'lin', 1, 1, ''))
+  params:add_control("nb_note_length", "NB Note Length", controlspec.new(0, 10, 'lin', 0.1, 1, '')) 
+  params:add_option("internal_ON_OFF", "Internal: Engine", {"OFF", "ON"}, 2)
+  params:add_option("internal_accents", "Internal: Accents", {"OFF", "ON"}, 2)
   params:add_separator("Internal Engine", "Internal Engine")
   clk:add_clock_params()
   setup_params()
@@ -658,7 +646,7 @@ function step()
     for i=1,rudiments_track_count do track[i].pos = 1 end
     reset = false
   else
-    for i=1,rudiments_track_count do track[i].pos = (track[i].pos % track[i].n) + 1 end
+    for i=1,rudiments_track_count do track[i].pos = (track[i].pos % params:get(t_length[i])) + 1 end
   end
   
   trig()
@@ -697,6 +685,7 @@ function key(n,z) -- n is number 1-3, z is pressed: 1, released: 0
 end
 
 function enc(n,d) -- number, direction/step?
+  redraw_flag = true
   if pitch_view_enable == false then
     if n==1 then -- trigger sequencer view
       if key1_hold then
@@ -705,17 +694,18 @@ function enc(n,d) -- number, direction/step?
         track_edit = util.clamp(track_edit+d,1,rudiments_track_count)
       end
     elseif n == 2 then
-      track[track_edit].k = util.clamp(track[track_edit].k+d,0,track[track_edit].n)
+      params:set(t_density[track_edit], params:get(t_density[track_edit]) + d)
+      redraw_flag = false
     elseif n==3 then
-      track[track_edit].n = util.clamp(track[track_edit].n+d,1,32)
-      track[track_edit].k = util.clamp(track[track_edit].k,0,track[track_edit].n)
+      params:set(t_length[track_edit], params:get(t_length[track_edit]) + d)
+      params:set(t_density[track_edit], util.clamp(params:get(t_density[track_edit]), 0, params:get(t_length[track_edit])))
+      redraw_flag = false
     end
   else -- pitch sequencer view
     if n==1 then
       track_edit = util.clamp(track_edit+d,1,rudiments_track_count) -- select track
     elseif n == 2 then
-      track_notes[track_edit] = util.clamp(track_notes[track_edit] + d, 0, 127) -- select pitch
-      params:set("freq" .. track_edit, mutil.note_num_to_freq(track_notes[track_edit])) -- set freq when turn enc
+      params:set(t_pitch[track_edit], util.clamp(params:get(t_pitch[track_edit]) + d, 0, 127)) -- select pitch
     elseif n == 3 then
       if d < 0 then 
         for x = 12, 15 do
@@ -732,9 +722,11 @@ function enc(n,d) -- number, direction/step?
       end
     end
   end
-  
-  reer(track_edit)
-  redraw()
+
+  if redraw_flag == true then
+    reer(track_edit)
+    redraw()
+  end
 end
 
 function redraw()
@@ -746,12 +738,13 @@ function redraw()
       -- first two numbers and brightness
       screen.level((i == track_edit) and 15 or 4) -- 0 to 15 brightness, 15 if selected with track_edit 1-8
       screen.move(5, i*8) -- move draw cursor, 8, ... , 64
-      screen.text_center(track[i].k) -- draw text, euclidean triggers
+      screen.text_center(params:get(t_density[i]))
       screen.move(20,i*8) -- move draw cursor
-      screen.text_center(track[i].n) -- draw text, euclidean length
+      screen.text_center(params:get(t_length[i]))
 
       -- create sequence and brightness
-      for x=1,track[i].n do
+      -- for x=1,track[i].n do
+      for x=1,params:get(t_length[i]) do
         screen.level((track[i].pos==x and not reset) and 15 or 2)
         screen.move(x*3 + 30, i*8) -- move draw cursor
         
@@ -771,7 +764,7 @@ function redraw()
       screen.move(5, i*8) -- move draw cursor, 8, ... , 64
       screen.text_center(#track_pitch_pos[i]) -- draw text, length of pitch offset sequence
       screen.move(20,i*8) -- move draw cursor
-      screen.text_center(track_notes[i]) -- draw text, base note of sequence
+      screen.text_center(params:get(t_pitch[i])) -- draw text, base note of sequence
 
       -- create line sequence and brightness
       pitch_pos = track_pitch_pos[i]:peek()
